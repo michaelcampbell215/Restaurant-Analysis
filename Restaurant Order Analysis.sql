@@ -1,214 +1,267 @@
-# Objective 1
-# Explore the items table
-# Your first objective is to better understand the items table by finding the number of rows in the table, the least and most expensive items, and the item prices within each category.
-
-
-# 1.1 View the menu_items table and write a query to find the nuber of items on the menu
--- number of menu items
-SELECT DISTINCT COUNT(menu_item_id) AS item_count
-FROM menu_items;-- 32 items
-
-# 1.2 What are the least and most expensive items on the menu?
-SELECT item_name, MIN(price) AS min_price
-FROM menu_items
-GROUP BY item_name
-ORDER BY min_price
-LIMIT 1; -- Least expensive:Edamame $5.00
-
-SELECT item_name, MAX(price) AS max_price
-FROM menu_items
-GROUP BY item_name
-ORDER BY max_price DESC
-LIMIT 1; -- Most expensive: Shrimp Scampi $19.95
-
-# 1.3.a How many Italian dishes are on the menu? 
-SELECT DISTINCT COUNT(menu_item_id) AS item_count
-FROM menu_items
-WHERE category = 'Italian'; -- 9 Italian dishes
-
-# 1.3.b What are the least and most expensive Italian dishes on the menu?
-SELECT item_name, category, MAX(price) AS price
-FROM menu_items
-WHERE category = 'Italian'
-GROUP BY item_name, category
-ORDER BY price DESC
-LIMIT 1;-- Most expensive: Shrimp Scampi $19.95
-
-SELECT item_name, category, MIN(price) AS price
-FROM menu_items
-WHERE category = 'Italian'
-GROUP BY item_name, category
-ORDER BY 3
-LIMIT 2;-- Least expensive: Spaghetti and Fettuccine Alfredo $14.50
-
-# 1.4 How many dishes are in each category? What is the average dish price within each category?
-SELECT DISTINCT category, COUNT(menu_item_id) AS number_of_dishes, ROUND(AVG(price), 2) AS avg_dish_price
-FROM menu_items
-GROUP BY category;
-# category		number_of_dishes		avg_dish_price
-# American		6						$10.07
-# Asian			8						$13.48
-# Mexican		9						$11.80
-# Italian		9						$16.75
-
-
-# Objective 2
-# Explore the orders table
-# Your second objective is to better understand the orders table by finding the date range, the number of items within each order, and the orders with the highest number of items.
-
-# 2.1.a View the order_details table. 
-SELECT * FROM order_details;
-
-# 2.1.b What is the date range of the table?
-SELECT MIN(order_date), MAX(order_date)
-FROM order_details;-- 2023-01-01 - 2023-03-31
-
-# 2.2.a How many orders were made within this date range? 
-SELECT COUNT(DISTINCT order_id) AS total_orders
-FROM order_details;
--- total_orders 5370
-
-# 2.2.b How many items were ordered within this date range?
-SELECT COUNT(*) AS total_items
-FROM order_details;
--- total_items 12234
-
-# 2.3 Which orders had the most number of items
-SELECT order_id, COUNT(item_id) AS total_items
-FROM order_details
-GROUP BY order_id
-ORDER BY total_items DESC
-LIMIT 7; -- 7 orders has the same number of items
-# Order_id	Total_Items
-# 1957		14
-# 4305		14
-# 440		14
-# 443		14
-# 3473		14
-# 330		14
-# 2675		14
-
-# 2.4 How many orders had more than 12 items?
-SELECT COUNT(order_id) total_orders
+# Objective 1:  Operational Health Check
+# 1.1.a: What are the busiest days of the week?
+SELECT
+    DAYNAME(order_date) AS day_of_week,
+    COUNT(DISTINCT order_id) AS number_of_orders
 FROM
-    (SELECT order_id, COUNT(item_id)
-    FROM order_details
-    GROUP BY order_id
-    HAVING COUNT(item_id) > 12) order_count;
--- 20 orders have more than 12 items
+    fact_orders
+GROUP BY
+    day_of_week
+ORDER BY
+    number_of_orders DESC;
+ 
+# 1.1.b What are the busiest hours within each day?
+SELECT
+    DAYNAME(order_date) AS day_of_week,
+    HOUR(order_time) AS hour_of_day,
+    COUNT(DISTINCT order_id) AS number_of_orders
+FROM
+    fact_orders 
+GROUP BY
+	DAYOFWEEK(order_date),
+    day_of_week,
+    hour_of_day
+ORDER BY
+    DAYOFWEEK(order_date), 
+    number_of_orders DESC;     
+    
+
+# 1.2.a What are the most and least popular items?
+SELECT
+    m.item_name,
+    COUNT(o.order_id) AS total_orders
+FROM
+	dim_menu_items m
+LEFT JOIN
+	fact_orders o ON m.menu_item_id = o.item_id
+GROUP BY 
+    m.item_name
+ORDER BY
+	total_orders DESC;
 
 
-# Objective 3
-# Analyze customer behavior
-# Your final objective is to combine the items and orders tables, find the least and most ordered categories, and dive into the details of the highest spend orders.
-
-# 3.1 Combine the menu_items and order_details table into a single table
-DROP TABLE IF EXISTS menu_orders;
-CREATE TABLE menu_orders 
-(SELECT 
-	mi.menu_item_id
-    ,mi.item_name
-   ,mi.category
-    ,mi.price
-    ,od.order_details_id
-    ,od.order_id
-    ,od.order_date
-    ,od.order_time 
-FROM menu_items mi
-	INNER JOIN order_details od 
-		ON mi.menu_item_id = od.item_id);
-select count(*) from menu_items;
-
-# 3.2 What were the least and most ordered items? What categories were they in?
-DROP TABLE IF EXISTS ordered_items; 
-CREATE TEMPORARY TABLE ordered_items 
-(SELECT item_name, category, COUNT(menu_item_id) AS item_count
-FROM menu_orders
-GROUP BY item_name, category);
-
-select * from ordered_items;
--- most ordered item
-SELECT item_name, category, MAX(item_count) AS most_ordered
-FROM ordered_items
-GROUP BY item_name, category
-ORDER BY most_ordered DESC
-LIMIT 1; -- Hamburger, American, 622
-
--- least ordered item
-SELECT item_name, category, MIN(item_count) AS least_ordered
-FROM ordered_items
-GROUP BY item_name, category
-ORDER BY least_ordered
-LIMIT 1; -- Chicken Tacos, Mexican, 123
-        
-# 3.3 What were the top 5 orders that spent the most money?
-SELECT order_id, sum(price) AS order_total
-FROM menu_orders
-GROUP BY order_id
-ORDER BY order_total DESC
-LIMIT 5;
-# order_id	order_total
-# 440		192.15
-# 2075		191.05
-# 1957		190.10
-# 330		189.70
-# 2675		185.10
-
-# 3.4 View the details of the highest spend order. Which specific items were purchased?
--- find order with the highest total (order id 440)
-SELECT order_id, sum(price) AS order_total
-FROM menu_orders 
-GROUP BY order_id
-ORDER BY order_total DESC
-LIMIT 1;
-
--- find all orders
-SELECT * 
-FROM menu_orders
-WHERE order_id = 440;
-
--- order caregories
--- find specific items purchased
-SELECT DISTINCT category, count(item_name) AS total_items
-FROM menu_orders
-WHERE order_id = 440
-group by 1;
-# category	total_items
-# Mexican	2
-# American	2
-# Italian	8
-# Asian		2
-
--- find specific items purchased
-SELECT DISTINCT item_name, count(item_name) AS total_items
-FROM menu_orders
-WHERE order_id = 440
-group by 1;
-# item_name				total_items
-# Steak Tacos			1
-# Hot Dog				1
-# Spaghetti				1
-# Spaghetti & Meatballs	2
-# Fettuccine Alfredo	2
-# Korean Beef Bowl		1
-# Meat Lasagna			1
+# 1.2.b  only the items that have never sold a single time
+SELECT
+    m.item_name,
+    COUNT(o.order_id) AS total_orders
+FROM
+	dim_menu_items m
+LEFT JOIN
+	fact_orders o
+	ON m.menu_item_id = o.item_id
+GROUP BY 
+    m.item_name
+HAVING 
+	COUNT(o.order_id) = 0;
 
 
-# 3.5 BONUS: View the details of the top 5 highest spend orders
-SELECT order_id, sum(price) AS order_total
-FROM menu_orders 
-GROUP BY order_id
-ORDER BY order_total DESC
-LIMIT 5;
+# Objective 2:  Uncovering Profit & Marketing Drivers
+# 2.1.a Which menu items and categories generate the most revenue? 
+SELECT
+	m.item_name,
+    m.category,
+    SUM(m.price) AS total_revenue
+FROM
+	dim_menu_items m
+INNER JOIN
+	fact_orders o
+	ON m.menu_item_id = o.item_id
+GROUP BY 
+	m.item_name,
+    m.category
+ORDER BY 
+	total_revenue DESC;
 
-# order_id	 order_total
-# 440		 192.15
-# 2075		 191.05
-# 1957		 190.10
-# 330		 189.70
-# 2675		 185.10
 
-SELECT order_id, category, count(item_name) AS total_items
-FROM menu_orders
-WHERE order_id IN (440, 2075, 1957, 330, 2675)
-GROUP BY order_id, category;
+# 2.1.b Are the most popular items also the most profitable?
+WITH Popularity AS (
+  SELECT 
+    m.menu_item_id, 
+    m.item_name, 
+    COUNT(o.order_id) AS total_orders 
+  FROM 
+    dim_menu_items m 
+    LEFT JOIN fact_orders o ON m.menu_item_id = o.item_id 
+  GROUP BY 
+    m.menu_item_id, 
+    m.item_name
+), 
+Revenue AS (
+  SELECT 
+    m.menu_item_id, 
+    m.item_name, 
+    m.category, 
+    sum(m.price) AS total_revenue 
+  FROM 
+    dim_menu_items m 
+    INNER JOIN fact_orders o ON m.menu_item_id = o.item_id 
+  GROUP BY 
+    m.menu_item_id, 
+    m.item_name, 
+    m.category
+) 
+SELECT 
+  p.item_name, 
+  p.total_orders, 
+  r.total_revenue 
+FROM 
+  Popularity p 
+  INNER JOIN Revenue r ON r.menu_item_id = p.menu_item_id 
+ORDER BY 
+  p.total_orders DESC, 
+  r.total_revenue;
+
+
+
+# 2.1.c Which menu categories generate the most revenue?
+SELECT 
+  m.category, 
+  COUNT(o.order_id) AS total_orders, 
+  SUM(m.price) AS total_revenue 
+FROM 
+  dim_menu_items m 
+  INNER JOIN fact_orders o ON m.menu_item_id = o.item_id 
+GROUP BY 
+  m.category 
+ORDER BY 
+  total_revenue DESC;
+
+
+# 2.1.d Which items are most frequently purchased together? (e.g., Hamburgers and French Fries)
+WITH order_items AS(
+  SELECT 
+    o.order_id, 
+    o.item_id, 
+    m.item_name 
+  FROM 
+    dim_menu_items m 
+    INNER JOIN fact_orders o ON m.menu_item_id = o.item_id
+) 
+SELECT 
+  count(a.order_id) order_pairs, 
+  a.item_name, 
+  b.item_name 
+FROM 
+  order_items a 
+  INNER JOIN order_items b ON a.order_id = b.order_id 
+WHERE 
+  a.item_id < b.item_id 
+GROUP BY 
+  a.item_name, 
+  b.item_name 
+ORDER BY 
+  order_pairs DESC;
+
+
+
+# 2.2 How does average order value (AOV) change during peak vs. off-peak hours?
+WITH ordertotals AS (
+    SELECT
+        o.order_id,
+        o.order_time,
+        SUM(m.price) AS order_total
+    FROM
+        fact_orders o
+    INNER JOIN
+        dim_menu_items m ON o.item_id = m.menu_item_id
+    GROUP BY
+        o.order_id,
+        o.order_time
+)
+SELECT
+    CASE
+        WHEN order_time BETWEEN '11:00:00' AND '14:00:00'
+             OR order_time BETWEEN '18:00:00' AND '21:00:00'
+        THEN 'Peak'
+        ELSE 'Off-Peak'
+    END AS peak_hours,
+    ROUND(AVG(order_total),2) AS avg_order_total
+FROM
+    ordertotals
+GROUP BY
+    peak_hours;
+
+
+# 2.3  Which items are most frequently purchased together and do they cross cuisines?
+WITH order_items AS(
+  SELECT 
+    o.order_id, 
+    o.item_id, 
+    m.item_name 
+  FROM 
+    dim_menu_items m 
+    INNER JOIN fact_orders o ON m.menu_item_id = o.item_id
+), 
+item_pairs AS(
+  SELECT 
+    COUNT(a.order_id) paired_orders, 
+    a.item_name AS item_name_1, 
+    b.item_name AS item_name_2 
+  FROM 
+    order_items a 
+    INNER JOIN order_items b ON a.order_id = b.order_id 
+  WHERE 
+    a.item_id < b.item_id 
+  GROUP BY
+    item_name_1, 
+    item_name_2
+), 
+categorypairs AS(
+  SELECT 
+    p.paired_orders, 
+    p.item_name_1, 
+    m1.category AS category_1, 
+    p.item_name_2, 
+    m2.category AS category_2 
+  FROM 
+    item_pairs p 
+    LEFT JOIN dim_menu_items m1 ON m1.item_name = p.item_name_1 
+    LEFT JOIN dim_menu_items m2 ON m2.item_name = p.item_name_2
+) 
+SELECT 
+  paired_orders, 
+  item_name_1, 
+  category_1, 
+  item_name_2, 
+  category_2, 
+  CASE WHEN category_1 = category_2 THEN 'Same Category' ELSE 'Cross Category' END AS category_paring 
+FROM 
+  categorypairs 
+ORDER BY
+  paired_orders DESC;
+
+
+# Objective 3: Menu Engineering & Segmentation
+# Segment every menu item into one of four strategic categories
+WITH total_order_revenue AS (
+  SELECT 
+    m.item_name, 
+    COUNT(o.order_id) AS total_orders, 
+    SUM(m.price) AS total_revenue 
+  FROM 
+    dim_menu_items m 
+    INNER JOIN fact_orders o ON m.menu_item_id = o.item_id 
+  GROUP BY 
+    m.item_name
+), 
+ItemRanks AS (
+  SELECT 
+    item_name, 
+    total_orders, 
+    total_revenue, 
+    NTILE(2) OVER (ORDER BY total_orders DESC) AS order_ntile, 
+    NTILE(2) OVER (ORDER BY total_revenue DESC) AS revenue_ntile 
+  FROM 
+    total_order_revenue
+) 
+SELECT 
+  item_name, 
+  CASE WHEN order_ntile = 1 
+	  AND revenue_ntile = 1 THEN 'Stars' WHEN order_ntile = 1 
+	  AND revenue_ntile = 2 THEN 'Workhorses' WHEN revenue_ntile = 1 
+	  AND order_ntile = 2 THEN 'Puzzles' WHEN order_ntile 
+	  AND revenue_ntile = 2 THEN 'Low Performers' ELSE 'other' END AS ranking 
+FROM 
+  ItemRanks 
+ORDER BY
+  ranking;
