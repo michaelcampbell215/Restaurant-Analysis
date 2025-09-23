@@ -47,7 +47,7 @@ Peak days and times of day?
     * **Friday:** 12 PM - 1 PM (12 PM is the peak)
     * **Saturday:** 12 PM
     * **Sunday:** 12 PM - 1 PM (1 PM is the peak)
-    * 
+      
  
 Popularity vs. Profitability
 * The **Hamburger** is the most popular item with 622 orders, but it is not the highest revenue generator.
