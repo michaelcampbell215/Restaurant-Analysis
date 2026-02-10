@@ -1,76 +1,129 @@
-# Restaurant-Analysis
+# Restaurant Order Analysis
 
+**Case Study: SQL Analytics**
 
-***
+> **Executive Summary:**  
+> Taste of the World Cafe faced a disconnect between menu complexity and operational profitability. By leveraging advanced SQL techniques (CTEs, Window Functions), this analysis categorized menu efficiency, revealing that the highest-volume item (Hamburger) was underperforming in revenue, while the "Italian" segment was a hidden driver of profitability. The recommendations below outline a strategy to optimize staffing for lunch peaks and restructure the menu to feature high-margin items.
 
-##   A Strategic Analysis of Menu Performance for Taste of the World Cafe
-
-### Executive Summary
-> This report details a comprehensive analysis of the 'Taste of the World Cafe's' new menu performance. By examining sales data, we identified key operational patterns, uncovered significant revenue drivers, and translated these findings into a concrete, data-driven strategy. Key recommendations include promoting "Star" performers, re-engineering "Workhorse" items for profitability, increasing the visibility of high-margin "Puzzles," and removing underperforming "Duds." A significant opportunity was discovered in marketing unique "Fusion Combos" based on observed cross-category purchasing behavior, such as pairing American and Asian cuisine. Implementing these strategies is projected to enhance customer experience, increase profitability, and optimize kitchen operations.
-
-***
-
-### Objectives 
-
--   Analyze Operational Patterns: To identify the busiest days of the week and times of day to inform staffing and operational efficiency.
--   Evaluate Menu Performance: To determine the most and least popular menu items and categories, assessing both sales frequency and revenue generation.
--   Uncover Customer Behavior: To discover which items are most frequently purchased together, revealing hidden trends in customer preferences and opportunities for combo deals.
--   Provide Strategic Recommendations: To synthesize all analytical findings into a set of actionable, data-driven recommendations for menu engineering, marketing initiatives, and promotional strategies to boost profitability and enhance the customer experience.
-
-***
-
-### Data Sources 
-
--   **Menu Items Data:** Extracted details about each menu item, including the number of menu items, pricing, and categories.
--   **Customer Orders Data:** Analyzed customer orders to understand preferences and frequently ordered items.
-
-***
-
-### Methodology 
-
--   Data Modeling: Transformed raw CSV files into a relational Star Schema to ensure data integrity for the analysis.
--   Descriptive Analysis: Executed initial SQL queries to establish a baseline of operational performance, identifying peak hours and item popularity.
--    Advanced Analytics: Employed advanced SQL techniques, including CTEs, self-joins, and NTILE() window functions, to analyze profitability, customer spending habits, and item pairing behaviors.
-- Strategic Segmentation: Synthesized all data into a 2x2 menu engineering matrix (Stars, Workhorses, Puzzles, Duds) to generate targeted, data-driven business recommendations.
-***
+---
 
 ### Key Insights
-Peak days and times of day?
-* **Peak Days:** Monday was the busiest day, followed by Sunday and Friday.
-* **Slowest Day:** Wednesday was the least busy day.
-* **Key Observation:** Notably, Saturday was towards the bottom of the ranking, while the other weekend days ranked among the highest.
-* **Peak Hours:**
-    * **Monday:** 12 PM - 1 PM (12 PM is the peak)
-    * **Tuesday:** 6 PM - 7 PM (6 PM is the peak)
-    * **Wednesday:** 4 PM - 6 PM (5 PM is the peak)
-    * **Thursday:** 12 PM
-    * **Friday:** 12 PM - 1 PM (12 PM is the peak)
-    * **Saturday:** 12 PM
-    * **Sunday:** 12 PM - 1 PM (1 PM is the peak)
-      
- 
-Popularity vs. Profitability
-* The **Hamburger** is the most popular item with 622 orders, but it is not the highest revenue generator.
-* The **Korean Beef Bowl** is the third most popular item but brings in more revenue than the Hamburger.
-* While not the most popular, **Italian dishes as a category drive the most revenue**, making them hidden champions of the menu.
 
+| **Top Revenue**                    | **Peak Volume**                 | **Star Item**                                  | **Fusion Factor**                          |
+| :--------------------------------- | :------------------------------ | :--------------------------------------------- | :----------------------------------------- |
+| **Italian**<br>Cuisine Performance | **Lunch**<br>Mon/Fri/Sun Demand | **Korean Beef Bowl**<br>High Profit / High Vol | **49% Drop-off**<br>Conversion Opportunity |
 
-***
+---
 
-### Recommendations 
+## Query Showcase
 
-**1. Promote Your Stars (High Pop, High Rev):**
-* **Recommendation:** Feature these items prominently. Create high-value combos based on their most popular pairings.
-- **Action:** Market the **Korean Beef Bowl** with its popular pairing, Edamame, as a "Traditional Asian" special. Also, elevate the entire **Italian category** with a dedicated menu section.
+### 1. Temporal Traffic Analysis
 
-**2. Optimize Your Workhorses (High Pop, Low Rev):**
-* **Recommendation:** Increase the profitability of popular but lower-revenue items like the Hamburger.
-* **Action:** Create an "American/Asian Fusion" meal by pairing the **Hamburger or Cheeseburger with Edamame**. This leverages a proven popular pairing to increase the total order value.
+**Identifying the bottleneck hours using cron-style SQL ordering.**
 
-**3. Uncover Your Puzzles (Low Pop, High Rev):**
-* **Recommendation:** Increase the visibility of these hidden gems.
-* **Action:** Implement promotions like "Dish of the Week" for high-margin Italian dishes or train staff to recommend them.
+```sql
+SELECT
+    DAYNAME(order_date) AS day_of_week,
+    HOUR(order_time) AS hour_of_day,
+    COUNT(DISTINCT order_id) AS number_of_orders
+FROM fact_orders
+GROUP BY
+    DAYOFWEEK(order_date), day_of_week, hour_of_day
+ORDER BY
+    DAYOFWEEK(order_date), number_of_orders DESC;
+```
 
-**4. Learn from Your Duds (Low Pop, Low Rev):**
-* **Recommendation:** Use data from unpopular pairings as hindsight.
-* **Action:** We observed that pairing two low-performing items (e.g., Hot Dog and Chicken Tacos) does not resonate with customers. However, pairing a high-performer with a low-performer (Cheeseburger and Steak Torta) can be successful. Use this insight to avoid creating combo deals that are unlikely to sell and instead focus on pairings with at least one "star" item. Consider removing the lowest performers to simplify the menu.
+- **Result:** Lunch hours on Mon/Fri/Sun are critical peaks. Recommended staffing increase specifically for these windows to maintain service SLAs.
+
+### 2. Strategic Menu Matrix (CTE + NTILE)
+
+**Classification of menu items into 'Stars', 'Puzzle', 'Workhorse', and 'Dud'.**
+
+```sql
+WITH total_order_revenue AS (
+    SELECT
+        m.item_name,
+        COUNT(o.order_id) AS total_orders,
+        SUM(m.price) AS total_revenue
+    FROM dim_menu_items m
+    INNER JOIN fact_orders o ON m.menu_item_id = o.item_id
+    GROUP BY m.item_name
+),
+ItemRanks AS (
+    SELECT
+        item_name, total_orders, total_revenue,
+        NTILE(2) OVER (ORDER BY total_orders DESC) AS order_ntile,
+        NTILE(2) OVER (ORDER BY total_revenue DESC) AS revenue_ntile
+    FROM total_order_revenue
+)
+SELECT
+    item_name, total_orders, total_revenue,
+    CASE
+        WHEN order_ntile = 1 AND revenue_ntile = 1 THEN 'Star'
+        WHEN order_ntile = 1 AND revenue_ntile = 2 THEN 'Workhorse'
+        WHEN order_ntile = 2 AND revenue_ntile = 1 THEN 'Puzzle'
+        WHEN order_ntile = 2 AND revenue_ntile = 2 THEN 'Dud'
+    END AS item_category
+FROM ItemRanks;
+```
+
+- **Result:** Isolated 'Stars' vs 'Duds'. Revealed that the Hamburger (Volume Leader) isn't the primary Revenue Driver, prompting a re-valuation of bundling strategies.
+
+---
+
+## Building the Data Pipeline
+
+### 1. Schema Foundation (Dimensional Modeling)
+
+**Constructed a robust dimensional model (Star Schema).**
+Joined operational fact tables with menu dimension items to create a reliable playground for complex analytical queries.
+
+### 2. Basket Analysis (Self-Joins)
+
+**Executed self-joins on the `fact_orders` table.**
+Uncovered cross-cuisine purchasing behavior. Found that customers frequently pair American staples with Asian sides.
+
+### 3. Operational Logic (CASE Expressions)
+
+**Engineered automated categorization.**
+This removed manual guesswork for the management team, providing a live "Menu Dashboard" via SQL views.
+
+---
+
+## Strategic Recommendations
+
+### Revenue Gains
+
+- **Promote "Stars":** Focus on items like the **Korean Beef Bowl** to maximize high-margin sales.
+- **Staffing Optimization:** Target staffing for peak lunchtime windows (Mon, Fri, Sun).
+
+### Menu Optimization
+
+- **Italian "Puzzles":** Promote the Italian category as the primary revenue segment that needs higher visibility.
+- **Fusion Combos:** Launch combos based on identified basket pairing trends (e.g., Burger + Edamame).
+
+---
+
+## Technical Implementation
+
+### Database Schema
+
+The analysis is built on a Star Schema structure:
+
+- **`fact_orders`**: Transactional table containing `order_id`, `item_id`, `order_date`, and `order_time`.
+- **`dim_menu_items`**: Dimension table containing `menu_item_id`, `item_name`, `category`, and `price`.
+
+### Setup Instructions
+
+1.  **Prerequisites:** Install [MySQL Workbench](https://www.mysql.com/products/workbench/).
+2.  **Data Import:**
+    - Unzip `Restaurant Orders MySQL.zip`.
+    - Load the `.csv` files into your local MySQL instance.
+    - Run `Restaurant Order Analysis.sql` to generate the views and tables.
+
+---
+
+## Contact
+
+**Need SQL Clarity?**
+[Email](mailto:mcam215@gmail.com) | [LinkedIn](https://linkedin.com/in/michaelcampbellanalyst) | [GitHub](https://github.com/michaelcampbell215)
