@@ -1,4 +1,4 @@
-# Restaurant Order Analysis
+# Inventory & Margin Optimization
 
 **Case Study: SQL Analytics**
 
